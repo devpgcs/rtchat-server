@@ -1,6 +1,6 @@
 import { Model } from 'mongoose';
 import { InjectModel } from '@nestjs/mongoose';
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 
 import { UserService } from 'src/user/user.service';
 import { UserDocument } from 'src/user/models/user.model';
@@ -23,10 +23,7 @@ export class ChatService {
    * @param {CreateChatDto} createChatDto The data transfer object for creating a chat
    * @returns {Promise<Chat>} The created chat
    */
-  async create(
-    user: UserDocument,
-    createChatDto: CreateChatDto,
-  ): Promise<Chat> {
+  async create(user: UserDocument, createChatDto: CreateChatDto): Promise<Chat> {
     // We create a set to ensure that there are no duplicate participants IDs
     const participants = new Set([
       ...(createChatDto.participants as unknown as string[]),
@@ -35,9 +32,7 @@ export class ChatService {
 
     // If there are less than two participants, we throw an error
     if (participants.size < 2) {
-      throw new BadRequestException(
-        'A chat must have at least two participants',
-      );
+      throw new BadRequestException('A chat must have at least two participants');
     }
 
     // We check if all participants exist in the database
@@ -54,7 +49,11 @@ export class ChatService {
     const newChat = new this.chatModel({
       participants: Array.from(participants),
     });
+
     const createdChat = await newChat.save();
+    const updatedUser = await user.updateOne({ $push: { chats: createdChat.id } }, { new: true });
+
+    Logger.debug(updatedUser, this.constructor.name + ' - updatedUser');
 
     return createdChat.toJSON();
   }
@@ -95,13 +94,7 @@ export class ChatService {
    * @param {UserDocument} user The authenticated user from the request
    * @returns {Promise<ChatDocument | null>} The chat found or null if not found
    */
-  findByParticipant(
-    chatId: string,
-    user: UserDocument,
-  ): Promise<ChatDocument | null> {
-    return this.chatModel
-      .findOne({ _id: chatId, participants: user.id })
-      .select('id')
-      .exec();
+  findByParticipant(chatId: string, user: UserDocument): Promise<ChatDocument | null> {
+    return this.chatModel.findOne({ _id: chatId, participants: user.id }).select('id').exec();
   }
 }
